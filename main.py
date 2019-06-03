@@ -68,8 +68,8 @@ class Main(QMainWindow):
 
         # Find Kodi database
         # self.databases = self.getDatabases()
-
         
+        self.getDatabases()
         # Find all media that Kodi doesn't see
         # Find all media that Kodi sees
         # Find missing TV Show seasons
@@ -89,15 +89,20 @@ class Main(QMainWindow):
         # If a current job is running, kill it!
         # Setup a QTimer that periodically updates the progress while checking if they're active
         r = re.compile("[\\:\\w&.\\-\\/]+MyVideos\\d+.db$")
-        videoDatabase = filter(r.match, self.databases)
+        videoDatabase = list(filter(r.match, self.databases))[0]
         if self.allOptions['option1'].isChecked():
             # Establish a connection to the movie database
             connection = sqlite3.connect(videoDatabase)
             cursor = connection.cursor()
             # Get the movie name, movie path, movie filename
-            cursor.execute("SELECT idMovie, idFile FROM movie;")
+            cursor.execute("""SELECT DISTINCT strPath,strFilename FROM files
+                            INNER JOIN movie
+                            ON files.idFile = movie.idFile
+                            INNER JOIN path 
+                            ON files.idPath = path.idPath;""")
 
             allKnownMovies = cursor.fetchall()
+            self.updateText("Found {} files in Kodi...".format(len(allKnownMovies)))
             connection.close()
             p += 1
             
@@ -108,9 +113,33 @@ class Main(QMainWindow):
             connection = sqlite3.connect(videoDatabase)
             cursor = connection.cursor()
             # Get the movie name, movie path, movie filename
-            cursor.execute("SELECT c00 FROM movie;")
-            allKnownMovies = cursor.fetchall()
-
+            cursor.execute("SELECT DISTINCT c00 FROM movie;")
+            allKnownMovies = sorted(cursor.fetchall())
+            allKnownMovies = list(map(lambda nameTup: '"{}"'.format(nameTup[0]), allKnownMovies))
+            # Point out possible duplicates?
+            cursor.execute("""SELECT movie.c00,cnt,strPath FROM movie
+                            INNER JOIN files
+                            ON files.idFile = movie.idFile
+                            INNER JOIN path
+                            ON path.idPath = files.idPath
+                            LEFT JOIN (
+                            SELECT c00, COUNT(c00) AS cnt FROM movie 
+                            GROUP BY c00
+                            ) AS temptable
+                            ON movie.c00 = temptable.c00
+                            WHERE cnt > 1;""")
+            duplicates = sorted(cursor.fetchall())
+            duplicates = list(map(lambda entry: ",".join(
+                list(map(lambda item: '"{}"'.format(item), entry))), duplicates))
+            self.updateText("Writing out a CSV of movie names from Kodi...")
+            with open("{}/All Movies.csv".format(self.fileOutputDir), "w") as outfile:
+                outfile.write("Title\n")
+                outfile.write("\n".join(allKnownMovies))
+            self.updateText("{}/All Movies.csv".format(self.fileOutputDir))
+            with open("{}/All Duplicate Movies.csv".format(self.fileOutputDir), "w") as outfile:
+                outfile.write("Title,Total,Path\n")
+                outfile.write("\n".join(duplicates))
+            self.updateText("{}/All Duplicate Movies.csv".format(self.fileOutputDir))
             # Get the movie name, movie path, movie filename
             p += 1
             # self.updateText("Found {} movies logged by Kodi...".format(numFound))
@@ -148,7 +177,7 @@ class Main(QMainWindow):
     def getDatabases(self, databaseRoot=None):
         # For windows only
         if databaseRoot is None:
-            databaseRoot = "C:/Users/{}/AppData/Roaming/kodi/userdata".format(getuser())
+            databaseRoot = "C:/Users/{}/AppData/Roaming/Kodi/userdata/Database".format(getuser())
         
         databases = []
         if exists(databaseRoot):
@@ -161,18 +190,17 @@ class Main(QMainWindow):
             else:
                 databases = list(map(lambda database: "{}/{}".format(databaseRoot, database), databases))
                 self.updateText("Databases found: {}".format(databases))
+            self.databases = databases
         else:
             # Need a better work around
-            if databaseRoot == "" or databaseRoot != "C:/Users/{}/AppData/Roaming/kodi/userdata".format(getuser()):
+            if databaseRoot == "" or databaseRoot != "C:/Users/{}/AppData/Roaming/Kodi/userdata/Database".format(getuser()):
                 exit()
             self.updateText("No databases found at {}".format(databaseRoot))
-            self.updateText("A new location must be selected and must contain the userdata folder for kodi or the application with crash")
+            self.updateText("A new location must be selected and must contain the userdata folder for kodi or the application will crash")
             # Allow the user to pick a directory but see files
             # databaseRoot = QFileDialog.getExistingDirectory(self, "Select Database Location",QFileDialog.)
             databaseRoot = QFileDialog.getExistingDirectory(self, "Select Database Location")
-            databases = self.getDatabases(databaseRoot=databaseRoot)
-
-        return databases
+            self.getDatabases(databaseRoot=databaseRoot)
 
 
 if __name__ == "__main__":
@@ -180,5 +208,4 @@ if __name__ == "__main__":
     app = QtWidgets.QApplication(argv)
     mainWin = Main()
     mainWin.show()
-    mainWin.getDatabases()
     exit(app.exec_())
