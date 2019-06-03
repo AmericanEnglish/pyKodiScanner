@@ -3,11 +3,13 @@ from os import listdir
 from os.path import exists
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QMainWindow, QLabel, QGridLayout, QWidget,  QCheckBox, QTextEdit, QPushButton, QMessageBox, QFileDialog
-from PyQt5.QtCore import QSize    
+from PyQt5.QtCore import QSize, QTimer
+from multiprocessing import active_children, Queue
 import sqlite3
 import re
 
-from locateMedia import *
+from workers import VideoWorker
+
 class Main(QMainWindow):
     def __init__(self):
         # Initialize the super class
@@ -32,7 +34,7 @@ class Main(QMainWindow):
         option2 = QCheckBox("Produce a file containing all movies Kodi sees", self)
         option3 = QCheckBox("Check TV shows for missing seasons", self)
 
-        self.fileOutputDir = ""
+        self.fileOutputDir = "./"
         self.fileOutputDirText = "Output Files to: "
         self.fileOutputDirButton = QPushButton(self.fileOutputDirText, self)
         self.fileOutputDirLabel = QLabel(self.fileOutputDir, self)
@@ -51,8 +53,10 @@ class Main(QMainWindow):
         self.doButton = QPushButton("Do Checked Tasks", self)
         # Connect a function to the button
         self.doButton.clicked.connect(self.doAllPossibleActions)
-        
 
+        
+        self.option1ProgressLabel = QLabel("", self)
+        self.option1ProgressLabel.hide()
 
     
         gridLayout.addWidget(checkboxLabel, 0, 0, 1, 3)
@@ -65,11 +69,12 @@ class Main(QMainWindow):
         gridLayout.addWidget(QLabel("Log:"), 5, 0)
         gridLayout.addWidget(self.logText, 6,0,1,4)
         gridLayout.addWidget(self.doButton, 5, 3)
-
+        gridLayout.addWidget(self.option1ProgressLabel,7,0,1,4)
         # Find Kodi database
         # self.databases = self.getDatabases()
         
         self.getDatabases()
+
         # Find all media that Kodi doesn't see
         # Find all media that Kodi sees
         # Find missing TV Show seasons
@@ -87,7 +92,6 @@ class Main(QMainWindow):
                 return None
         p = 0
         # If a current job is running, kill it!
-        # Setup a QTimer that periodically updates the progress while checking if they're active
         r = re.compile("[\\:\\w&.\\-\\/]+MyVideos\\d+.db$")
         videoDatabase = list(filter(r.match, self.databases))[0]
         if self.allOptions['option1'].isChecked():
@@ -100,14 +104,28 @@ class Main(QMainWindow):
                             ON files.idFile = movie.idFile
                             INNER JOIN path 
                             ON files.idPath = path.idPath;""")
-
             allKnownMovies = cursor.fetchall()
             self.updateText("Found {} files in Kodi...".format(len(allKnownMovies)))
             connection.close()
             p += 1
-            
-            # self.updateText("Found {} missing movies!".format(numMissing))
-            # Write out the file
+            mediaDirectory = QFileDialog.getExistingDirectory(self, "Select Media Directory To Scan")
+            if mediaDirectory == "":
+                self.updateText("Media directory cannot be ignored for option 1! Skipping...")
+            else:
+                # Definitely broken!
+                # Start a thread safe queue
+                self.queue = Queue()
+                # Setup a timer
+                self.option1Timer = QTimer(self)
+                self.option1Timer.setInterval(1000)
+                self.option1Timer.timeout.connect(self.updateMovieDirectoriesScanned)
+                # Spin up a process
+                self.activeProcess = VideoWorker(self.queue, mediaDirectory, allKnownMovies, 
+                        self.fileOutputDir + "/Missing Movies.csv")
+                # Start a timer for checking and updating the files found marker
+                self.option1Timer.start()
+
+
         if self.allOptions['option2'].isChecked():
             # Establish a connection to the movie database
             connection = sqlite3.connect(videoDatabase)
@@ -162,6 +180,30 @@ class Main(QMainWindow):
             msg.exec()
             self.updateText("No actions selected!")
         return None
+    
+    # Possibly broken
+    def updateMovieDirectoriesScanned(self):
+        latest = None
+        # Check if active
+        qsize = self.queue.qsize()
+        totalActive = active_children()
+        # Check the queue
+        for num in range(qsize):
+            latest = self.queue.get()
+                    
+        if totalActive != 0:
+            if latest is not None:
+                self.option1ProgressLabel.show()
+                self.option1ProgressLabel.setText("Located {} files in media storage...".format(str(latest)))
+        else:
+            if latest is not None:
+                self.option1ProgressLabel.hide()
+                self.updateText("Safe finish: {} files not imported into Kodi".format(latest))
+                self.updateText("{}/Missing Movies.csv")
+                self.option1Timer.stop()
+
+
+
 
     def setOutputDir(self):
         self.fileOutputDir = QFileDialog.getExistingDirectory(self, "Select Media Location")
