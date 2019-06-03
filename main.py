@@ -158,7 +158,9 @@ class Main(QMainWindow):
                     databases.append(afile)
             if databases == []:
                 self.updateText("Directory exists but no databases found? Program will crash if ran further")
-            databases = list(map(lambda database: "{}/{}".format(databaseRoot, database), databases))
+            else:
+                databases = list(map(lambda database: "{}/{}".format(databaseRoot, database), databases))
+                self.updateText("Databases found: {}".format(databases))
         else:
             # Need a better work around
             if databaseRoot == "" or databaseRoot != "C:/Users/{}/AppData/Roaming/kodi/userdata".format(getuser()):
