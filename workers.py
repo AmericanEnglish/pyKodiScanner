@@ -1,4 +1,4 @@
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, freeze_support
 from os import listdir
 from os.path import abspath, isdir
 from os.path import join as pjoin
@@ -27,29 +27,37 @@ class VideoWorker(Process):
         # for i in range(10):
             # self.queue.put(str(i))
             # sleep(1)
-        allFiles = self.gather(self.top)
+        allFiles = self.gather(self.top, 0)
         print(allFiles)
         allFiles2 = flattenList(allFiles)
         self.queue.put(len(allFiles2))
         firstSet = set(allFiles2)
+        secondSet = set(self.presentData)
+        missing = firstSet - secondSet
+        self.queue.put(len(missing))
+        with open(self.outputFilename, "w") as outfile:
+            outfile.write("File Path,\n")
+            outfile.write("\n".join(list(map(lambda entry: '"{}"'.format(entry), sorted(list(missing))))))
 
-    def gather(self, myDirectory):
+
+    def gather(self, myDirectory, depth):
         # Recurse into non .dirs
         children = listdir(myDirectory)
         print(myDirectory, children)
         # filter out dot files and directories
         children = list(filter(lambda x: not self.Dot.match(x), children))
         # Convert these to absolute paths
-        children = list(map(lambda child: pjoin(abspath(myDirectory),myDirectory,child), children))
+        children = list(map(lambda child: "{}/{}".format(myDirectory,child), children))
         print(myDirectory, children)
         # Filter out files and take only directories
         allDirs = list(filter(isdir, children))
         print(allDirs)
         if len(allDirs) == 0:
             # Bottomed out. Return the files that matter
+            self.queue.put(depth)
             return list(filter(self.goodExtensions.match, children))
         else:
-            return list(map(lambda aDir: self.gather(aDir), allDirs))
+            return list(map(lambda aDir: self.gather(aDir, depth + 1), allDirs))
 def isFlat(someList):
     return bool(reduce(lambda x,y: x and y, map(lambda item: not isinstance(item, list), someList)))
 
@@ -69,3 +77,4 @@ def flattenList(aList):
                 newList.append(item)
         return newList
     return aList
+freeze_support()

@@ -4,7 +4,7 @@ from os.path import exists
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QMainWindow, QLabel, QGridLayout, QWidget,  QCheckBox, QTextEdit, QPushButton, QMessageBox, QFileDialog
 from PyQt5.QtCore import QSize, QTimer
-from multiprocessing import active_children, Queue
+from multiprocessing import active_children, Queue, freeze_support
 import sqlite3
 import re
 
@@ -177,7 +177,7 @@ class Main(QMainWindow):
             # cursor.execute("SELECT idMovie, idFile, c00 FROM movie")
             # allKnownShows = cursor.fetchall()
             connection.close()
-            set.updateText("Option 3 is not yet available")
+            self.updateText("Option 3 is not yet available")
             p += 1
             # self.updateText("Found {} missing seasons".format(numMissing))
             # Write out the file
@@ -203,7 +203,7 @@ class Main(QMainWindow):
         if totalActive != 0:
             if self.latest is not None:
                 self.option1ProgressLabel.show()
-                self.option1ProgressLabel.setText("Located {} files in media storage...".format(str(self.latest)))
+                self.option1ProgressLabel.setText("Currently at {} directories deep in media storage...".format(str(self.latest)))
         else:
             self.updateText("Cleaning up...")
             if self.latest is not None:
@@ -256,6 +256,7 @@ class Main(QMainWindow):
 
 
 if __name__ == "__main__":
+    freeze_support()
     from sys import argv, exit
     app = QtWidgets.QApplication(argv)
     mainWin = Main()
