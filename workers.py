@@ -53,7 +53,7 @@ class VideoWorker(Process):
         # Generate collection of missing names
         missingNames = []
         for entry in missing:
-            missingNames.append("{}{}".format(allFilesFlat[entry[1]][1], allFilesFlat[entry[1]][0]))
+            missingNames.append("{}/{}".format(allFilesFlat[entry[1]][1], allFilesFlat[entry[1]][0]))
         self.queue.put(len(missing))
         with open(self.outputFilename, "w") as outfile:
             outfile.write("File Path,\n")
