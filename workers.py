@@ -31,24 +31,29 @@ class VideoWorker(Process):
             # sleep(1)
         allFiles = self.gather(self.top, 0)
         # print(allFiles)
-        print("{}".format(len(allFiles)))
-        allFilesFlat = list(sorted(flattenList(allFiles)))
-        print(allFilesFlat)
+        # print("{} --- length == {}".format(allFiles, len(allFiles)))
+        allFilesFlat = flattenList(allFiles)
+        alltypes = list(set(list(map(type, allFilesFlat))))
+        print("Datatypes in top level: {}".format(alltypes))
+        print("List? {}".format(list(filter(lambda x: isinstance(x, list), allFilesFlat))))
+        # print("{} --- length == {}".format(allFilesFlat, len(allFilesFlat)))
+        # allFilesFlat.sort()
+        # print(allFilesFlat)
         # firstSet = set(allFilesFlat)
         # secondSet = set(self.presentData)
         # Only movie names from Kodi
-        self.presentData = sorted(self.presentData)
+        # self.presentData = sorted(self.presentData)
         allDetectedKodi = list(map(lambda x: x[0], self.presentData))
         # Only detected movie names
         allDetectedMedia = list(map(lambda x: x[0], allFilesFlat))
 
         # A bad find style
-        missing = list(filter(lambda x: [0], map(lambda x: (x[1] in allDetectedKodi,x[0]), enumerate(allDetectedMedia))))
+        missing = list(filter(lambda x: not x[0], map(lambda x: (x[1] in allDetectedKodi,x[0]), enumerate(allDetectedMedia))))
         print(missing)
         # Generate collection of missing names
         missingNames = []
         for entry in missing:
-            missingNames.append("".join(allFilesFlat[entry[1]]))
+            missingNames.append("{}{}".format(allFilesFlat[entry[1]][1], allFilesFlat[entry[1]][0]))
         self.queue.put(len(missing))
         with open(self.outputFilename, "w") as outfile:
             outfile.write("File Path,\n")
@@ -70,18 +75,19 @@ class VideoWorker(Process):
         # print(allDirs)
         if len(allDirs) == 0:
             # Bottomed out. Return the files that matter
-            self.queue.put("({})".format(myDirectory[-20:]))
-            return list(map(lambda child: [child, myDirectory], filter(self.goodExtensions.match, children)))
+            self.queue.put("({})".format(myDirectory[:]))
+            return list(map(lambda child: (child, myDirectory), filter(self.goodExtensions.match, children)))
         else:
             return list(map(lambda aDir: self.gather(aDir, depth + 1), allDirs))
 def isFlat(someList):
     if len(someList) > 1:
         return bool(reduce(lambda x,y: x and y, map(lambda item: not isinstance(item, list), someList)))
     elif len(someList) == 1:
-        return not isinstance(someList, list)
+        return not isinstance(someList[0], list)
     else:
         return True
         
+
 
 def flattenList(aList):
     # Check if the list is flat
@@ -90,7 +96,7 @@ def flattenList(aList):
         for item in aList:
             if isinstance(item, list):
                 # Check if the sublist is flat:
-                if len(item) > 1 and not isFlat(item):
+                if len(item) >= 1 and not isFlat(item):
                     # Flatten it
                     # print(item)
                     item = flattenList(item)
