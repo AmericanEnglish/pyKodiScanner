@@ -107,7 +107,7 @@ class Main(QMainWindow):
             connection = sqlite3.connect(videoDatabase)
             cursor = connection.cursor()
             # Get the movie name, movie path, movie filename
-            cursor.execute("""SELECT DISTINCT strPath,strFilename FROM files
+            cursor.execute("""SELECT DISTINCT strFilename,strPath FROM files
                             INNER JOIN movie
                             ON files.idFile = movie.idFile
                             INNER JOIN path 
@@ -203,7 +203,7 @@ class Main(QMainWindow):
         if totalActive != 0:
             if self.latest is not None:
                 self.option1ProgressLabel.show()
-                self.option1ProgressLabel.setText("Currently at {} directories deep in media storage...".format(str(self.latest)))
+                self.option1ProgressLabel.setText("Currently in {}...".format(str(self.latest)))
         else:
             self.updateText("Cleaning up...")
             if self.latest is not None:

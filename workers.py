@@ -10,7 +10,9 @@ class VideoWorker(Process):
         super(VideoWorker, self).__init__()
         self.found = 0
         self.top = topDirectory
-        self.presentData = list(map(lambda entry: "{}{}".format(entry[0],entry[1]), allTuples))
+        # self.presentData = tuple(map(lambda entry: "{}{}".format(entry[0],entry[1]), allTuples))
+        self.presentData = list(allTuples)
+        # print(self.presentData)
         # There are possibly many more for videos for now this all I'm willing to type
         self.Dot = re.compile("^\\.[\\s\\S]*$")
         self.goodExtensions = re.compile("^[\\s\\S]*\\.(avi|m4v|mp4|m4a|mkv)$")
@@ -28,38 +30,58 @@ class VideoWorker(Process):
             # self.queue.put(str(i))
             # sleep(1)
         allFiles = self.gather(self.top, 0)
-        print(allFiles)
-        allFiles2 = flattenList(allFiles)
-        self.queue.put(len(allFiles2))
-        firstSet = set(allFiles2)
-        secondSet = set(self.presentData)
-        missing = firstSet - secondSet
+        # print(allFiles)
+        print("{}".format(len(allFiles)))
+        allFilesFlat = list(sorted(flattenList(allFiles)))
+        print(allFilesFlat)
+        # firstSet = set(allFilesFlat)
+        # secondSet = set(self.presentData)
+        # Only movie names from Kodi
+        self.presentData = sorted(self.presentData)
+        allDetectedKodi = list(map(lambda x: x[0], self.presentData))
+        # Only detected movie names
+        allDetectedMedia = list(map(lambda x: x[0], allFilesFlat))
+
+        # A bad find style
+        missing = list(filter(lambda x: [0], map(lambda x: (x[1] in allDetectedKodi,x[0]), enumerate(allDetectedMedia))))
+        print(missing)
+        # Generate collection of missing names
+        missingNames = []
+        for entry in missing:
+            missingNames.append("".join(allFilesFlat[entry[1]]))
         self.queue.put(len(missing))
         with open(self.outputFilename, "w") as outfile:
             outfile.write("File Path,\n")
-            outfile.write("\n".join(list(map(lambda entry: '"{}"'.format(entry), sorted(list(missing))))))
+            outfile.write("\n".join(list(map(lambda entry: '"{}"'.format(entry), sorted(list(missingNames))))))
 
 
     def gather(self, myDirectory, depth):
         # Recurse into non .dirs
         children = listdir(myDirectory)
-        print(myDirectory, children)
+        # print(myDirectory, children)
         # filter out dot files and directories
         children = list(filter(lambda x: not self.Dot.match(x), children))
+        # print(children)
         # Convert these to absolute paths
-        children = list(map(lambda child: "{}/{}".format(myDirectory,child), children))
-        print(myDirectory, children)
+        children2 = list(map(lambda child: "{}/{}".format(myDirectory,child), children))
+        # print(myDirectory, children)
         # Filter out files and take only directories
-        allDirs = list(filter(isdir, children))
-        print(allDirs)
+        allDirs = list(filter(isdir, children2))
+        # print(allDirs)
         if len(allDirs) == 0:
             # Bottomed out. Return the files that matter
-            self.queue.put(depth)
-            return list(filter(self.goodExtensions.match, children))
+            self.queue.put("({})".format(myDirectory[-20:]))
+            return list(map(lambda child: [child, myDirectory], filter(self.goodExtensions.match, children)))
         else:
             return list(map(lambda aDir: self.gather(aDir, depth + 1), allDirs))
 def isFlat(someList):
-    return bool(reduce(lambda x,y: x and y, map(lambda item: not isinstance(item, list), someList)))
+    if len(someList) > 1:
+        return bool(reduce(lambda x,y: x and y, map(lambda item: not isinstance(item, list), someList)))
+    elif len(someList) == 1:
+        return not isinstance(someList, list)
+    else:
+        return True
+        
 
 def flattenList(aList):
     # Check if the list is flat
@@ -68,9 +90,9 @@ def flattenList(aList):
         for item in aList:
             if isinstance(item, list):
                 # Check if the sublist is flat:
-                if not isFlat(item):
+                if len(item) > 1 and not isFlat(item):
                     # Flatten it
-                    print(item)
+                    # print(item)
                     item = flattenList(item)
                 newList.extend(item)
             else:
