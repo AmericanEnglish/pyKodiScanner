@@ -14,7 +14,6 @@ class Main(QMainWindow):
     def __init__(self):
         # Initialize the super class
         super().__init__()
-
         # self.setMinimumSize(QSize(640, 480))
         self.setMinimumWidth(480)
         self.setWindowTitle("pyJulieScanner - A Kodi Database Scanner")
@@ -74,7 +73,9 @@ class Main(QMainWindow):
         # self.databases = self.getDatabases()
         
         self.getDatabases()
-
+        self.activeProcess = None
+        self.latest = None
+        self.option1Timer = None
         # Find all media that Kodi doesn't see
         # Find all media that Kodi sees
         # Find missing TV Show seasons
@@ -91,10 +92,17 @@ class Main(QMainWindow):
                 self.updateText("No actions selected!")
                 return None
         p = 0
-        # If a current job is running, kill it!
+
         r = re.compile("[\\:\\w&.\\-\\/]+MyVideos\\d+.db$")
         videoDatabase = list(filter(r.match, self.databases))[0]
         if self.allOptions['option1'].isChecked():
+            # If a current job is running, kill it!
+            if self.option1Timer is not None  and self.option1Timer.isActive():
+                self.option1Timer.stop()
+            if self.activeProcess is not None and self.activeProcess.is_alive():
+                self.updateText("Killing active task...")
+                self.activeProcess.terminate()
+                self.updateText("Success! Starting new requested tasks...")
             # Establish a connection to the movie database
             connection = sqlite3.connect(videoDatabase)
             cursor = connection.cursor()
@@ -123,6 +131,7 @@ class Main(QMainWindow):
                 self.activeProcess = VideoWorker(self.queue, mediaDirectory, allKnownMovies, 
                         self.fileOutputDir + "/Missing Movies.csv")
                 # Start a timer for checking and updating the files found marker
+                self.activeProcess.start()
                 self.option1Timer.start()
 
 
@@ -183,25 +192,26 @@ class Main(QMainWindow):
     
     # Possibly broken
     def updateMovieDirectoriesScanned(self):
-        latest = None
         # Check if active
         qsize = self.queue.qsize()
-        totalActive = active_children()
+        totalActive = len(active_children())
+        print("Active children: {}".format(totalActive))
         # Check the queue
         for num in range(qsize):
-            latest = self.queue.get()
+            self.latest = self.queue.get()
                     
         if totalActive != 0:
-            if latest is not None:
+            if self.latest is not None:
                 self.option1ProgressLabel.show()
-                self.option1ProgressLabel.setText("Located {} files in media storage...".format(str(latest)))
+                self.option1ProgressLabel.setText("Located {} files in media storage...".format(str(self.latest)))
         else:
-            if latest is not None:
+            self.updateText("Cleaning up...")
+            if self.latest is not None:
                 self.option1ProgressLabel.hide()
-                self.updateText("Safe finish: {} files not imported into Kodi".format(latest))
-                self.updateText("{}/Missing Movies.csv")
+                self.updateText("Safe finish: {} files not imported into Kodi".format(self.latest))
+                self.updateText("{}Missing Movies.csv".format(self.fileOutputDir))
                 self.option1Timer.stop()
-
+        print("Tick!")
 
 
 
